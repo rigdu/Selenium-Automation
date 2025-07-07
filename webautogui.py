@@ -22,7 +22,7 @@ class WebAutomation:
         self.running = False
         self.stop_requested = False
         self.log = log_callback
-        self.login_url = "http://test.exactllyweb.com/Home"
+        self.login_url = "http://test.website.com/Home"
         self.target_product_codes = []
         self.processed_codes = []
         self.resume_from_code = None
