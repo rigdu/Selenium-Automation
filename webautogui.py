@@ -65,7 +65,7 @@ class WebAutomation:
         self.stop_requested = False
 
         # Chrome user cache setup
-        cache_path = r"C:\\Users\\ERP3\\Documents\\Rick Apps\\Selenium automation\\selenium_cache"
+        cache_path = r"C:\\Users\\<Your Path>\\selenium_cache"
         options = Options()
         options.add_argument(f"user-data-dir={cache_path}")
         options.add_argument("--start-maximized")
