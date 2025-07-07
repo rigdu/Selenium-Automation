@@ -12,6 +12,8 @@ import time
 from datetime import datetime
 import pyautogui
 import csv
+import os
+from selenium.webdriver.chrome.options import Options
 
 # Define automation class
 class WebAutomation:
@@ -20,11 +22,11 @@ class WebAutomation:
         self.running = False
         self.stop_requested = False
         self.log = log_callback
-        self.login_url = "http://test.website.com/Home"
-        self.start_index = 0
-        self.processed_indices = []
+        self.login_url = "http://test.exactllyweb.com/Home"
+        self.target_product_codes = []
+        self.processed_codes = []
+        self.resume_from_code = None
 
-        # Read credentials from pass.txt
         try:
             with open("pass.txt", "r") as f:
                 lines = f.read().splitlines()
@@ -35,33 +37,52 @@ class WebAutomation:
             self.password = ""
             self.log(f"Failed to read credentials: {e}")
 
-    def save_processed_indices(self):
+        try:
+            with open("items.csv", newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader)
+                self.target_product_codes = [row[1].strip() for row in reader if row[1].strip()]
+        except Exception as e:
+            self.log(f"Failed to read items.csv: {e}")
+
+        try:
+            with open("resume.txt", "r") as f:
+                self.resume_from_code = f.read().strip()
+        except:
+            self.resume_from_code = None
+
+    def save_processed_codes(self):
         with open("processed_rows.csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["EditButtonIndex", "Timestamp"])
-            for entry in self.processed_indices:
+            writer.writerow(["ProductCode", "Timestamp"])
+            for entry in self.processed_codes:
                 writer.writerow(entry)
 
     def highlight(self, element):
         self.driver.execute_script("arguments[0].style.border='3px solid red'", element)
 
-    def start(self, start_from=0):
+    def start(self):
         self.stop_requested = False
-        self.start_index = start_from
 
-        self.driver = webdriver.Chrome(service=Service('./chromedriver.exe'))
+        # Chrome user cache setup
+        cache_path = r"C:\\Users\\ERP3\\Documents\\Rick Apps\\Selenium automation\\selenium_cache"
+        options = Options()
+        options.add_argument(f"user-data-dir={cache_path}")
+        options.add_argument("--start-maximized")
+
+        self.driver = webdriver.Chrome(service=Service('./chromedriver.exe'), options=options)
         self.driver.get(self.login_url)
 
         try:
             self.log("Filling username...")
-            self.driver.find_element(By.XPATH, '//*[@id="validate-form"]/div[1]/input').send_keys(self.username)
-
-            self.log("Filling password...")
-            self.driver.find_element(By.XPATH, '//*[@id="validate-form"]/div[2]/div/input').send_keys(self.password)
-
-            self.log("Clicking login button...")
-            self.driver.find_element(By.XPATH, '//*[@id="validate-form"]/div[5]/button[1]').click()
-            time.sleep(3)
+            try:
+                self.driver.find_element(By.XPATH, '//*[@id="validate-form"]/div[1]/input').send_keys(self.username)
+                self.driver.find_element(By.XPATH, '//*[@id="validate-form"]/div[2]/div/input').send_keys(self.password)
+                self.log("Clicking login button...")
+                self.driver.find_element(By.XPATH, '//*[@id="validate-form"]/div[5]/button[1]').click()
+                time.sleep(3)
+            except:
+                self.log("Already logged in or session reused.")
 
             self.log("Clicking master button...")
             self.driver.find_element(By.XPATH, '/html/body/div/div[2]/section/div/div/div/div/div/div/div/div/a[1]/div').click()
@@ -90,52 +111,80 @@ class WebAutomation:
             self.driver.switch_to.window(self.driver.window_handles[-1])
             time.sleep(10)  # allow manual setting to view all entries
 
-            index = self.start_index
+            resume_found = self.resume_from_code is None
 
             while not self.stop_requested:
                 try:
-                    self.log(f"Processing edit button index {index}...")
-                    edit_xpath = f"//*[@id][contains(@id,'-uiGrid-0005-cell') and contains(@id,'-{index}-')]/button[3]"
-                    edit_button = WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.XPATH, edit_xpath)))
-                    self.highlight(edit_button)
-                    edit_button.click()
-                    time.sleep(2)
+                    code_elements = self.driver.find_elements(By.XPATH, "//*[@id][contains(@id, '-uiGrid-0006-cell')]/div/u")
+                    codes_on_page = [el.text.strip() for el in code_elements]
 
-                    self.log("Checking checkbox...")
-                    try:
-                        checkbox = WebDriverWait(self.driver, 10).until(
-                            EC.presence_of_element_located((By.XPATH, '//*[@id="frm_OPTICAL_ITEM"]/div/fieldset[3]/div/div/div/div/table/tbody/tr/td[2]/input'))
-                        )
-                        if not checkbox.is_selected():
-                            self.highlight(checkbox)
-                            checkbox.click()
-                    except Exception as e:
-                        self.log(f"Checkbox error: {e}")
+                    for i in range(len(codes_on_page)):
+                        code = codes_on_page[i]
 
-                    self.log("Clicking save button...")
-                    self.driver.find_element(By.XPATH, '/html/body/div/div[2]/section/div[2]/div[1]/div/div[2]/ul/li[1]/a/span/i').click()
-                    time.sleep(1)
+                        if not resume_found:
+                            if code == self.resume_from_code:
+                                resume_found = True
+                            else:
+                                continue
 
-                    self.log("Clicking final save in dialog...")
-                    self.driver.find_element(By.XPATH, '/html/body/div[3]/div/div/form/div/div[3]/button[2]').click()
+                        if code in self.target_product_codes and code not in [row[0] for row in self.processed_codes]:
+                            self.log(f"Processing Product Code: {code} (row {i})")
+                            edit_xpath = f"//*[@id][contains(@id,'-uiGrid-0005-cell') and contains(@id,'-{i}-')]/button[3]"
+                            edit_button = WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.XPATH, edit_xpath)))
+                            self.highlight(edit_button)
+                            edit_button.click()
+                            time.sleep(5)
+
+                            self.log("Checking checkbox...")
+                            try:
+                                WebDriverWait(self.driver, 15).until(
+                                    EC.presence_of_element_located((By.XPATH, '//*[@id="frm_OPTICAL_ITEM"]/div/fieldset[3]/div/div/div/div/table/tbody/tr/td[2]/input'))
+                                )
+                                checkboxes = self.driver.find_elements(By.XPATH, '//*[@id="frm_OPTICAL_ITEM"]/div/fieldset[3]/div/div/div/div/table/tbody/tr/td[2]/input')
+                            except:
+                                checkboxes = []
+
+                            if not checkboxes:
+                                self.log("No checkboxes found.")
+                            else:
+                                for cb in checkboxes:
+                                    try:
+                                        self.driver.execute_script("arguments[0].scrollIntoView(true);", cb)
+                                        if not cb.is_selected():
+                                            self.highlight(cb)
+                                            cb.click()
+                                            time.sleep(0.5)
+                                    except Exception as e:
+                                        self.log(f"Checkbox interaction failed: {e}")
+
+                            self.log("Clicking save button...")
+                            self.driver.find_element(By.XPATH, '/html/body/div/div[2]/section/div[2]/div[1]/div/div[2]/ul/li[1]/a/span/i').click()
+                            time.sleep(1)
+
+                            self.log("Clicking final save in dialog...")
+                            self.driver.find_element(By.XPATH, '/html/body/div[3]/div/div/form/div/div[3]/button[2]').click()
+                            time.sleep(5)
+
+                            try:
+                                self.log("Clicking optional OK...")
+                                self.driver.find_element(By.XPATH, '//*[@id="frm_OPTICAL_ITEM"]/div/div[2]/div/div[3]/button').click()
+                                time.sleep(1)
+                            except:
+                                self.log("OK button not present.")
+
+                            self.driver.execute_script("window.onbeforeunload = null;")
+                            self.log("Navigating back to list view...")
+                            self.driver.back()
+                            time.sleep(5)
+
+                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            self.processed_codes.append([code, timestamp])
+                            self.save_processed_codes()
+
+                    self.log("Clicking Next Page...")
+                    next_btn = self.driver.find_element(By.XPATH, '/html/body/div/div[2]/section/div[2]/div[2]/div/div/div/div[3]/div/div[1]/button[2]')
+                    next_btn.click()
                     time.sleep(5)
-
-                    try:
-                        self.log("Clicking optional OK...")
-                        self.driver.find_element(By.XPATH, '//*[@id="frm_OPTICAL_ITEM"]/div/div[2]/div/div[3]/button').click()
-                        time.sleep(1)
-                    except:
-                        self.log("OK button not present.")
-
-                    self.driver.execute_script("window.onbeforeunload = null;")
-                    self.log("Navigating back to list view...")
-                    self.driver.back()
-                    time.sleep(5)
-
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.processed_indices.append([index, timestamp])
-                    self.save_processed_indices()
-                    index += 1
 
                 except Exception as e:
                     self.log(f"Item failed or not found: {e}")
@@ -155,11 +204,6 @@ class App:
         self.root = root
         self.root.title("Web Automation")
 
-        tk.Label(root, text="Start from Edit Button Index:").pack()
-        self.start_entry = tk.Entry(root)
-        self.start_entry.insert(0, "0")
-        self.start_entry.pack(pady=5)
-
         self.start_button = tk.Button(root, text="Start", command=self.start_thread)
         self.start_button.pack(pady=5)
 
@@ -177,9 +221,8 @@ class App:
         self.log_box.see(tk.END)
 
     def start_thread(self):
-        start_index = int(self.start_entry.get())
-        self.log(f"Starting automation from edit button index {start_index}...")
-        Thread(target=self.automation.start, args=(start_index,)).start()
+        self.log("Starting automation using Product Code match...")
+        Thread(target=self.automation.start).start()
 
     def stop(self):
         self.automation.stop()
