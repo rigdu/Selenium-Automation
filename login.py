@@ -7,7 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # Full path for Chrome user cache
-cache_path = r"C:\Users\ERP3\Documents\Rick Apps\Selenium automation\selenium_cache"
+cache_path = r"C:\Users\YOUR DESIRED PATH\selenium_cache"
 
 # Set up Chrome options to use this cache
 options = Options()
