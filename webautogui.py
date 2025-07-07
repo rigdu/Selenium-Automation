@@ -20,7 +20,7 @@ class WebAutomation:
         self.running = False
         self.stop_requested = False
         self.log = log_callback
-        self.login_url = "http://test.exactllyweb.com/Home"
+        self.login_url = "http://test.website.com/Home"
         self.start_index = 0
         self.processed_indices = []
 
