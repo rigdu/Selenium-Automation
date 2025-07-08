@@ -1,0 +1,7 @@
+{
+  "cache_path": "C:\\Users\\<YOURPATH>\\selenium_cache",
+  "url": "http://test.website.com/Home",
+  "username": "your_username",
+  "password": "your_password",
+  "resume_from_code": "PRODUCT_CODE_HERE"
+}
